@@ -1,0 +1,1 @@
+Place "The-Sims-Medieval-v1.0.1-32bit.ipa" here named as "bundled_game.ipa" (or symlinked) to build the standalone Sims Medieval APK (-PSTANDALONE_SIMS=true).

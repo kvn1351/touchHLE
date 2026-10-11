@@ -286,9 +286,9 @@ impl Window {
         // Separate mouse and touch events
         sdl2::hint::set("SDL_TOUCH_MOUSE_EVENTS", "0");
 
-        // SDL2 disables the screen saver by default, but iPhone OS enables
-        // the idle timer that triggers sleep by default, so we turn it back on
-        // here, and then the app can disable it if it wants to.
+        #[cfg(target_os = "android")]
+        video_ctx.disable_screen_saver();
+        #[cfg(not(target_os = "android"))]
         video_ctx.enable_screen_saver();
 
         let scale_hack = options.scale_hack;

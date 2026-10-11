@@ -38,6 +38,37 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [(UIWebView*) {:?} loadRequest:{:?} ({})]", this, request, url_string);
 }
 
+- (())loadHTMLString:(id)string baseURL:(id)_base_url {
+    let s = if string != nil {
+        to_rust_string(env, string)
+    } else {
+        Cow::default()
+    };
+    log!("TODO: [(UIWebView*) {:?} loadHTMLString:baseURL: (html len {})]", this, s.len());
+}
+
+- (id)delegate {
+    nil
+}
+
+- (bool)isLoading {
+    false
+}
+
+- (bool)canGoBack {
+    false
+}
+
+- (bool)canGoForward {
+    false
+}
+
+- (())stopLoading {
+}
+
+- (())reload {
+}
+
 @end
 
 };

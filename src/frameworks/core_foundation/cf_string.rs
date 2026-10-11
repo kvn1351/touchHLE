@@ -53,6 +53,17 @@ fn CFStringAppendCString(
     msg![env; string appendString:to_append]
 }
 
+fn CFStringAppendCharacters(
+    env: &mut Environment,
+    the_string: CFMutableStringRef,
+    chars: ConstPtr<unichar>,
+    num_chars: CFIndex,
+) {
+    let length: NSUInteger = num_chars.try_into().unwrap();
+    let to_append: id = msg_class![env; NSString stringWithCharacters:chars length:length];
+    msg![env; the_string appendString:to_append]
+}
+
 fn CFStringAppendFormat(
     env: &mut Environment,
     string: CFMutableStringRef,
@@ -446,6 +457,7 @@ fn CFStringNormalize(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringAppend(_, _)),
+    export_c_func!(CFStringAppendCharacters(_, _, _)),
     export_c_func!(CFStringAppendCString(_, _, _)),
     export_c_func!(CFStringAppendFormat(_, _, _, _)),
     export_c_func!(CFStringConvertEncodingToNSStringEncoding(_)),

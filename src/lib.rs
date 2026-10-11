@@ -67,8 +67,8 @@ pub use touchHLE_version::*;
 #[cfg(target_os = "android")]
 #[no_mangle]
 pub extern "C" fn SDL_main(
-    _argc: std::ffi::c_int,
-    _argv: *const *const std::ffi::c_char,
+    argc: std::ffi::c_int,
+    argv: *const *const std::ffi::c_char,
 ) -> std::ffi::c_int {
     // Rust's default panic handler prints to stderr, but on Android that just
     // gets discarded, so we set a custom hook to make debugging easier.
@@ -87,8 +87,24 @@ pub extern "C" fn SDL_main(
         }
     }));
 
-    // Empty args: brings up app picker.
-    match main([String::new()].into_iter()) {
+    let args: Vec<String> = if argc > 0 && !argv.is_null() {
+        (0..argc)
+            .map(|i| unsafe {
+                let ptr = *argv.add(i as usize);
+                if ptr.is_null() {
+                    String::new()
+                } else {
+                    std::ffi::CStr::from_ptr(ptr)
+                        .to_string_lossy()
+                        .into_owned()
+                }
+            })
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+
+    match main(args.into_iter()) {
         Ok(_) => echo!("touchHLE finished"),
         Err(e) => echo!("touchHLE errored: {e:?}"),
     }

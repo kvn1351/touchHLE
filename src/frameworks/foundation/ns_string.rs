@@ -24,7 +24,7 @@ use crate::frameworks::uikit::ui_font::{
 };
 use crate::fs::GuestPath;
 use crate::mach_o::MachO;
-use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, Ptr, SafeRead};
+use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports,
     HostObject, NSZonePtr, ObjC,
@@ -119,7 +119,12 @@ impl StringHostObject {
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSUTF8StringEncoding => {
-                let string = String::from_utf8(bytes.into_owned()).unwrap();
+                let bytes = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                    &bytes[3..]
+                } else {
+                    &bytes[..]
+                };
+                let string = String::from_utf8(bytes.to_vec()).unwrap();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSWindowsCP1252StringEncoding => {
@@ -140,21 +145,32 @@ impl StringHostObject {
             | NSUTF16LittleEndianStringEncoding => {
                 assert!(bytes.len().is_multiple_of(2));
 
-                let is_big_endian = match encoding {
-                    NSUTF16BigEndianStringEncoding => true,
-                    NSUTF16LittleEndianStringEncoding => false,
+                let (is_big_endian, bytes) = match encoding {
+                    NSUTF16BigEndianStringEncoding => (
+                        true,
+                        if bytes.starts_with(&[0xFE, 0xFF]) {
+                            &bytes[2..]
+                        } else {
+                            &bytes[..]
+                        },
+                    ),
+                    NSUTF16LittleEndianStringEncoding => (
+                        false,
+                        if bytes.starts_with(&[0xFF, 0xFE]) {
+                            &bytes[2..]
+                        } else {
+                            &bytes[..]
+                        },
+                    ),
                     NSUTF16StringEncoding => match &bytes[0..2] {
-                        [0xFE, 0xFF] => true,
-                        [0xFF, 0xFE] => false,
+                        [0xFE, 0xFF] => (true, &bytes[2..]),
+                        [0xFF, 0xFE] => (false, &bytes[2..]),
                         // Assuming NSUTF16LittleEndianStringEncoding if no BOM
                         // is present
-                        // TODO: it seems that foundation can prefix string
-                        // with BOM bytes?
-                        _ => false,
+                        _ => (false, &bytes[..]),
                     },
                     _ => unreachable!(),
                 };
-                // TODO: Should the BOM be stripped? Always/sometimes/never?
 
                 StringHostObject::Utf16(if is_big_endian {
                     bytes
@@ -1032,6 +1048,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)stringByAppendingPathComponent:(id)component { // NSString*
+    if component == nil {
+        return this;
+    }
     // TODO: avoid copying
     let base_str = to_rust_string(env, this);
     let component_str = to_rust_string(env, component);
@@ -1042,6 +1061,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)stringByAppendingPathExtension:(id)extension { // NSString*
+    if extension == nil {
+        return this;
+    }
     // FIXME: handle edge cases like trailing '/' (may differ from Rust!)
     let mut combined = to_rust_string(env, this).into_owned();
     // TODO: avoid copying
@@ -1393,6 +1415,29 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes
+                   length:(NSUInteger)len
+                 encoding:(NSStringEncoding)encoding
+             freeWhenDone:(bool)free_when_done {
+    let bytes_ptr = bytes.cast::<u8>();
+    let slice = env.mem.bytes_at(bytes_ptr, len);
+    let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);
+
+    *env.objc.borrow_mut(this) = host_object;
+
+    if free_when_done && !bytes.is_null() {
+        env.mem.free(bytes);
+    }
+
+    this
+}
+
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes
+                   length:(NSUInteger)len
+                 encoding:(NSStringEncoding)encoding {
+    msg![env; this initWithBytesNoCopy:bytes length:len encoding:encoding freeWhenDone:true]
+}
+
 - (id)initWithCharacters:(ConstPtr<unichar>)characters length:(NSUInteger)len {
     assert!(!characters.is_null());
     let num_bytes = len * 2;
@@ -1611,6 +1656,29 @@ pub const CLASSES: ClassExports = objc_classes! {
     *env.objc.borrow_mut(this) = host_object;
 
     this
+}
+
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes
+                   length:(NSUInteger)len
+                 encoding:(NSStringEncoding)encoding
+             freeWhenDone:(bool)free_when_done {
+    let bytes_ptr = bytes.cast::<u8>();
+    let slice = env.mem.bytes_at(bytes_ptr, len);
+    let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);
+
+    *env.objc.borrow_mut(this) = host_object;
+
+    if free_when_done && !bytes.is_null() {
+        env.mem.free(bytes);
+    }
+
+    this
+}
+
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes
+                   length:(NSUInteger)len
+                 encoding:(NSStringEncoding)encoding {
+    msg![env; this initWithBytesNoCopy:bytes length:len encoding:encoding freeWhenDone:true]
 }
 
 - (id)initWithFormat:(id)format, // NSString*

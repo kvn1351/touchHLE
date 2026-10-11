@@ -45,14 +45,27 @@ android {
     }
     defaultConfig {
         val branding = getTouchHLEBranding()
-        applicationId = "org.touchhle.android"
-        if (!branding.isEmpty()) {
-            applicationIdSuffix = branding.lowercase()
+        val isStandaloneSims = project.hasProperty("STANDALONE_SIMS")
+        if (isStandaloneSims) {
+            applicationId = "org.touchhle.android.simsmedieval"
+            resValue("string", "app_name", "The Sims Medieval")
+            buildConfigField("String", "APP_NAME", "\"The Sims Medieval\"")
+            manifestPlaceholders["icon"] = "@drawable/icon_simsmedieval"
+            buildConfigField("int", "APP_ICON", "R.drawable.icon_simsmedieval")
+            buildConfigField("boolean", "IS_STANDALONE", "true")
+            buildConfigField("String", "STANDALONE_GAME_NAME", "\"The-Sims-Medieval-v1.0.1-32bit.ipa\"")
+        } else {
+            applicationId = "org.touchhle.android"
+            if (!branding.isEmpty()) {
+                applicationIdSuffix = branding.lowercase()
+            }
+            resValue("string", "app_name", join("touchHLE", " ", branding))
+            buildConfigField("String", "APP_NAME", "\"${join("touchHLE", " ", branding)}\"")
+            manifestPlaceholders["icon"] = join("@drawable/icon", "_", branding.lowercase())
+            buildConfigField("int", "APP_ICON", join("R.drawable.icon", "_", branding.lowercase()))
+            buildConfigField("boolean", "IS_STANDALONE", "false")
+            buildConfigField("String", "STANDALONE_GAME_NAME", "\"\"")
         }
-        resValue("string", "app_name", join("touchHLE", " ", branding))
-        buildConfigField("String", "APP_NAME", "\"${join("touchHLE", " ", branding)}\"")
-        manifestPlaceholders["icon"] = join("@drawable/icon", "_", branding.lowercase())
-        buildConfigField("int", "APP_ICON", join("R.drawable.icon", "_", branding.lowercase()))
         versionName = join(getTouchHLEVersionName(), " ", branding)
 
         minSdk = 21 // first version with AArch64
@@ -84,7 +97,7 @@ android {
         release {
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
-            isDebuggable = true // allow use of ADB to manage files, etc
+            isDebuggable = false
         }
         debug {
             isMinifyEnabled = false
@@ -108,6 +121,9 @@ android {
     sourceSets {
         getByName("main") {
             java.srcDir("${rootDir.parentFile}/vendor/SDL/android-project/app/src/main/java")
+            if (project.hasProperty("STANDALONE_SIMS")) {
+                assets.srcDir("src/main/standalone_assets")
+            }
         }
     }
 
