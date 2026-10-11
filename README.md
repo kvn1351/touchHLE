@@ -1,5 +1,8 @@
 # touchHLE: high-level emulator for early iOS apps
 
+> [!NOTE]
+> **Sims Medieval Compatibility Fork**: This fork includes dedicated fixes and enhancements to make ***The Sims Medieval*** (iOS) fully playable on modern systems (macOS, Android, etc.). It also features a standalone version on Android so the game behaves like a native port.
+
 **touchHLE** is a high-level emulator for early iOS apps. It runs on modern desktop operating systems and Android, and is written in Rust.
 
 touchHLE's high-level emulation (HLE) approach differs from low-level emulation (LLE) in that it does not directly simulate the iPhone/iPod touch hardware. Instead of running iOS inside emulation, touchHLE _itself_ takes the place of iOS and provides its own implementations of the system frameworks (Foundation, UIKit, OpenGL ES, OpenAL, etc). The only code the [emulated CPU](https://github.com/merryhime/dynarmic) executes is the app binary and [a handful of libraries](touchHLE_dylibs/).
