@@ -3,6 +3,59 @@
 > [!NOTE]
 > **Sims Medieval Compatibility Fork**: This fork includes dedicated fixes and enhancements to make ***The Sims Medieval*** (iOS) fully playable on modern systems (macOS, Android, etc.). It also features a standalone version on Android so the game behaves like a native port.
 
+# The Sims Medieval: Standalone Android Port
+
+This fork includes dedicated support to build a standalone, self-contained Android APK for ***The Sims Medieval*** (v1.0.1) that boots straight into the game like a native mobile app.
+
+### 1. Where to place the .ipa
+Obtain a decrypted 32-bit copy of `The-Sims-Medieval-v1.0.1-32bit.ipa` and place or symlink it inside `android/app/src/main/standalone_assets/` named as `bundled_game.ipa`:
+
+```bash
+# Copy or symlink the decrypted IPA:
+cp "/path/to/The-Sims-Medieval-v1.0.1-32bit.ipa" "android/app/src/main/standalone_assets/bundled_game.ipa"
+```
+*(All `.ipa` files are git-ignored to prevent committing proprietary assets).*
+
+### 2. Android Build Prerequisites
+* **Android SDK & NDK** (`25.2.9519653` / `r25c` recommended).
+* **Rust Android target**:
+  ```bash
+  rustup target add aarch64-linux-android
+  ```
+* **cargo-ndk**:
+  ```bash
+  cargo install cargo-ndk
+  ```
+* **Boost headers**: Downloaded and extracted into `vendor/boost` (see [dev-docs/building.md](dev-docs/building.md)).
+
+### 3. Build the Standalone Release APK
+Run Gradle with the `-PSTANDALONE_SIMS=true` property:
+
+```bash
+# Optional: Set SDK / NDK environment paths if not configured in local.properties
+export ANDROID_NDK_HOME="<path-to-ndk>"
+export ANDROID_SDK_HOME="<path-to-sdk>"
+
+# Build the release APK:
+gradle -p android assembleRelease -PSTANDALONE_SIMS=true
+```
+
+The APK will be generated at:
+```
+android/app/build/outputs/apk/release/app-release.apk
+```
+
+**Features of the standalone build:**
+* Uses a dedicated package ID (`org.touchhle.android.simsmedieval`) so it does not conflict with standard touchHLE.
+* Includes custom Sims Medieval app branding, launcher icon, and name.
+* Automatically extracts and boots the bundled `.ipa` on first launch.
+* Keeps the display awake (`FLAG_KEEP_SCREEN_ON`) during gameplay.
+
+### 4. Install onto your Android device
+```bash
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+```
+
 **touchHLE** is a high-level emulator for early iOS apps. It runs on modern desktop operating systems and Android, and is written in Rust.
 
 touchHLE's high-level emulation (HLE) approach differs from low-level emulation (LLE) in that it does not directly simulate the iPhone/iPod touch hardware. Instead of running iOS inside emulation, touchHLE _itself_ takes the place of iOS and provides its own implementations of the system frameworks (Foundation, UIKit, OpenGL ES, OpenAL, etc). The only code the [emulated CPU](https://github.com/merryhime/dynarmic) executes is the app binary and [a handful of libraries](touchHLE_dylibs/).
