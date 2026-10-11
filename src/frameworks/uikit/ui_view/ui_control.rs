@@ -31,6 +31,7 @@ const UIControlEventTouchDragEnter: UIControlEvents = 1 << 4;
 const UIControlEventTouchDragExit: UIControlEvents = 1 << 5;
 pub const UIControlEventTouchUpInside: UIControlEvents = 1 << 6;
 const UIControlEventTouchUpOutside: UIControlEvents = 1 << 7;
+const UIControlEventTouchCancel: UIControlEvents = 1 << 8;
 pub const UIControlEventValueChanged: UIControlEvents = 1 << 12;
 
 // TODO: Add the other UIControlContentVerticalAlignment enums
@@ -240,12 +241,18 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     }
     if !msg![env; this continueTrackingWithTouch:touch withEvent:event] {
+        if env.objc.borrow::<UIControlHostObject>(this).tracked_touch != touch {
+            return;
+        }
         release(env, tracked_touch);
         env.objc.borrow_mut::<UIControlHostObject>(this).tracked_touch = nil;
         env.objc.borrow_mut::<UIControlHostObject>(this).tracking = false;
         () = msg![env; this setHighlighted:false];
     }
 
+    if env.objc.borrow::<UIControlHostObject>(this).tracked_touch != touch {
+        return;
+    }
     let old_pos: CGPoint = msg![env; touch previousLocationInView:this];
     let new_pos: CGPoint = msg![env; touch locationInView:this];
     let was_inside = msg![env; this pointInside:old_pos withEvent:event];
@@ -266,19 +273,35 @@ pub const CLASSES: ClassExports = objc_classes! {
     if tracked_touch != touch {
         return;
     }
+    // Classify the touch before tracking callbacks can remove this control.
+    let new_pos: CGPoint = msg![env; touch locationInView:this];
+    let is_inside = msg![env; this pointInside:new_pos withEvent:event];
+
     () = msg![env; this endTrackingWithTouch:touch withEvent:event];
     release(env, tracked_touch);
     env.objc.borrow_mut::<UIControlHostObject>(this).tracked_touch = nil;
     () = msg![env; this setHighlighted:false];
-
-    let new_pos: CGPoint = msg![env; touch locationInView:this];
-    let is_inside = msg![env; this pointInside:new_pos withEvent:event];
 
     // TODO: unclear if this is meant to be affected by tracking
     send_actions(env, this, event, match is_inside {
         true => UIControlEventTouchUpInside,
         false => UIControlEventTouchUpOutside,
     });
+}
+
+- (())touchesCancelled:(id)touches // NSSet* of UITouch*
+             withEvent:(id)event { // UIEvent*
+    let touch = env.objc.borrow::<UIControlHostObject>(this).tracked_touch;
+    if touch == nil || !msg![env; touches containsObject:touch] {
+        return;
+    }
+    let host = env.objc.borrow_mut::<UIControlHostObject>(this);
+    host.tracked_touch = nil;
+    host.tracking = false;
+    () = msg![env; this cancelTrackingWithEvent:event];
+    () = msg![env; this setHighlighted:false];
+    send_actions(env, this, event, UIControlEventTouchCancel);
+    release(env, touch);
 }
 
 - (())addTarget:(id)target

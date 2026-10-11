@@ -49,6 +49,7 @@ static inline NSRange NSMakeRange(NSUInteger loc, NSUInteger len) {
 }
 + (Class)class;
 + (instancetype)alloc;
++ (instancetype)allocWithZone:(void *)zone;
 + (instancetype)new;
 + (BOOL)respondsToSelector:(SEL)selector;
 - (instancetype)init;
@@ -212,6 +213,26 @@ SEL NSSelectorFromString(NSString *);
 - (void)lockWhenCondition:(NSInteger)condition;
 - (BOOL)tryLockWhenCondition:(NSInteger)condition;
 - (void)unlockWithCondition:(NSInteger)condition;
+@end
+
+@interface NSOperation : NSObject
+- (void)start;
+- (void)main;
+- (BOOL)isExecuting;
+- (BOOL)isFinished;
+- (BOOL)isCancelled;
+- (BOOL)isReady;
+- (BOOL)isConcurrent;
+- (void)cancel;
+- (void)waitUntilFinished;
+@end
+
+@interface NSOperationQueue : NSObject
+- (void)addOperation:(NSOperation *)operation;
+- (NSInteger)maxConcurrentOperationCount;
+- (void)setMaxConcurrentOperationCount:(NSInteger)count;
+- (NSUInteger)operationCount;
+- (void)waitUntilAllOperationsAreFinished;
 @end
 
 // Core Graphics

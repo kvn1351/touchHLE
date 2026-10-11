@@ -23,10 +23,12 @@ pub const UITouchPhaseBegan: UITouchPhase = 0;
 pub const UITouchPhaseMoved: UITouchPhase = 1;
 pub const UITouchPhaseStationary: UITouchPhase = 2;
 pub const UITouchPhaseEnded: UITouchPhase = 3;
+pub const UITouchPhaseCancelled: UITouchPhase = 4;
 
 #[derive(Default)]
 pub struct State {
     current_touches: HashMap<FingerId, id>,
+    cancelled_fingers: HashSet<FingerId>,
 }
 
 pub(super) struct UITouchHostObject {
@@ -108,6 +110,74 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
+/// Cancel touches while the removed subtree is still attached, so callbacks
+/// can inspect locations without referring to a disconnected layer tree.
+pub(super) fn cancel_touches_for_view(env: &mut Environment, root: id) {
+    if env
+        .framework_state
+        .uikit
+        .ui_touch
+        .current_touches
+        .is_empty()
+    {
+        return;
+    }
+    let active: Vec<_> = env
+        .framework_state
+        .uikit
+        .ui_touch
+        .current_touches
+        .iter()
+        .map(|(&finger, &touch)| (finger, touch))
+        .collect();
+    let cancelled: Vec<_> = active
+        .iter()
+        .filter_map(|&(finger, touch)| {
+            let view = env.objc.borrow::<UITouchHostObject>(touch).view;
+            super::ui_view::is_descendant_of(env, view, root).then_some((finger, touch, view))
+        })
+        .collect();
+    if cancelled.is_empty() {
+        return;
+    }
+
+    let pool: id = msg_class![env; NSAutoreleasePool new];
+    let all_touches: id = msg_class![env; NSMutableSet new];
+    autorelease(env, all_touches);
+    for (_, touch) in active {
+        () = msg![env; all_touches addObject:touch];
+    }
+    let event = ui_event::new_event(env, all_touches);
+    autorelease(env, event);
+    let timestamp: NSTimeInterval = msg![env; event timestamp];
+    let mut view_touches = HashMap::new();
+    for (finger, touch, view) in cancelled {
+        let host = env.objc.borrow_mut::<UITouchHostObject>(touch);
+        host.phase = UITouchPhaseCancelled;
+        host.timestamp = timestamp;
+        let touches = *view_touches.entry(view).or_insert_with(|| {
+            let set: id = msg_class![env; NSMutableSet new];
+            autorelease(env, set)
+        });
+        () = msg![env; touches addObject:touch];
+        env.framework_state
+            .uikit
+            .ui_touch
+            .current_touches
+            .remove(&finger);
+        env.framework_state
+            .uikit
+            .ui_touch
+            .cancelled_fingers
+            .insert(finger);
+        release(env, touch); // current_touches ownership
+    }
+    for (view, touches) in view_touches {
+        () = msg![env; view touchesCancelled:touches withEvent:event];
+    }
+    release(env, pool);
+}
+
 /// [super::handle_events] will forward touch events to this function.
 pub fn handle_event(env: &mut Environment, event: Event) {
     // before processing anything, we mark all current touches as stationary
@@ -139,6 +209,11 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     let touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
 
     for (finger_id, coords) in map {
+        env.framework_state
+            .uikit
+            .ui_touch
+            .cancelled_fingers
+            .remove(&finger_id);
         let current_touches = &mut env.framework_state.uikit.ui_touch.current_touches;
 
         if current_touches.contains_key(&finger_id) {
@@ -303,6 +378,10 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     }
 
     for (view, touches) in view_touches {
+        let touch: id = msg![env; touches anyObject];
+        if env.objc.borrow::<UITouchHostObject>(touch).phase == UITouchPhaseCancelled {
+            continue;
+        }
         log_dbg!(
             "Sending [{:?} touchesBegan:{:?} withEvent:{:?}]",
             view,
@@ -329,6 +408,15 @@ fn handle_touches_move(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     let mut view_touches: HashMap<id, id> = HashMap::new();
 
     for (finger_id, coords) in map {
+        if env
+            .framework_state
+            .uikit
+            .ui_touch
+            .cancelled_fingers
+            .contains(&finger_id)
+        {
+            continue;
+        }
         let Some(&touch) = env
             .framework_state
             .uikit
@@ -429,6 +517,15 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     let mut view_touches: HashMap<id, id> = HashMap::new();
 
     for (finger_id, coords) in map {
+        if env
+            .framework_state
+            .uikit
+            .ui_touch
+            .cancelled_fingers
+            .remove(&finger_id)
+        {
+            continue;
+        }
         let Some(&touch) = env
             .framework_state
             .uikit

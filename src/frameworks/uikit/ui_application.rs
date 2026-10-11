@@ -26,7 +26,9 @@ pub struct State {
 
 struct UIApplicationHostObject {
     delegate: id,
-    delegate_is_retained: bool,
+    /// Own the main NIB's roots for the application's lifetime, independently
+    /// of the assign/non-retaining delegate property.
+    main_nib_objects: id,
 }
 impl HostObject for UIApplicationHostObject {}
 
@@ -57,7 +59,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UIApplicationHostObject {
         delegate: nil,
-        delegate_is_retained: false,
+        main_nib_objects: nil,
     });
     env.objc.alloc_static_object(this, host_object, &mut env.mem)
 }
@@ -82,15 +84,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UIApplicationHostObject>(this).delegate
 }
 - (())setDelegate:(id)delegate { // something implementing UIApplicationDelegate
-    let host_object = env.objc.borrow_mut::<UIApplicationHostObject>(this);
-    // This property is quasi-non-retaining: https://stackoverflow.com/a/14271150/736162
-    let old_delegate = std::mem::replace(&mut host_object.delegate, delegate);
-    if host_object.delegate_is_retained {
-        host_object.delegate_is_retained = false;
-        if delegate != old_delegate {
-            release(env, old_delegate);
-        }
-    }
+    env.objc.borrow_mut::<UIApplicationHostObject>(this).delegate = delegate;
 }
 
 - (bool)isStatusBarHidden {
@@ -301,8 +295,12 @@ pub(super) fn UIApplicationMain(
             if res != nil {
                 let nib: id = msg_class![env; UINib nibWithNibName:ns_main_nib_filename bundle:nil];
                 release(env, ns_main_nib_filename);
-                let _: id = msg![env; nib instantiateWithOwner:ui_application
-                                               options:nil];
+                let objects: id = msg![env; nib instantiateWithOwner:ui_application
+                                                     options:nil];
+                retain(env, objects);
+                env.objc
+                    .borrow_mut::<UIApplicationHostObject>(ui_application)
+                    .main_nib_objects = objects;
             } else {
                 log!(
                     "Warning: couldn't load main nib file {:?}",
@@ -316,15 +314,7 @@ pub(super) fn UIApplicationMain(
         }
 
         let delegate: id = msg![env; ui_application delegate];
-        if delegate != nil {
-            // The delegate was created while loading the nib file.
-            // Retain it so it doesn't get deallocated when the autorelease pool
-            // is drained. (See discussion in `setDelegate:`.)
-            env.objc
-                .borrow_mut::<UIApplicationHostObject>(ui_application)
-                .delegate_is_retained = true;
-            retain(env, delegate);
-        } else {
+        if delegate == nil {
             assert!(delegate_class_name != nil);
             if msg![env; delegate_class_name isEqual:principal_class_name] {
                 // If same non-nil class name is used for both principal and
@@ -339,8 +329,8 @@ pub(super) fn UIApplicationMain(
                 assert!(delegate != nil);
             }
         };
-        // We can't hang on to the delegate, the guest app may change it at any
-        // time.
+        // Fetch the current delegate for each lifecycle callback: the app may
+        // replace it while handling a previous callback.
 
         let _: () = msg![env; pool drain];
 
@@ -498,6 +488,8 @@ const UIApplicationWillTerminateNotification: &str = "UIApplicationWillTerminate
 /// Other app notifications
 const UIApplicationLaunchOptionsRemoteNotificationKey: &str =
     "UIApplicationLaunchOptionsRemoteNotificationKey";
+const UIApplicationLaunchOptionsLocalNotificationKey: &str =
+    "UIApplicationLaunchOptionsLocalNotificationKey";
 const UIApplicationDidReceiveMemoryWarningNotification: &str =
     "UIApplicationDidReceiveMemoryWarningNotification";
 
@@ -535,6 +527,10 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_UIApplicationLaunchOptionsRemoteNotificationKey",
         HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocalNotificationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsLocalNotificationKey),
     ),
 ];
 

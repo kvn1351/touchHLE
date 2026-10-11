@@ -19,8 +19,8 @@ use crate::frameworks::uikit::ui_view::ui_window::{
 };
 use crate::impl_HostObject_with_superclass;
 use crate::objc::{
-    id, msg, msg_class, msg_super, nil, objc_classes, release, todo_objc_setter, ClassExports,
-    NSZonePtr, SEL,
+    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, todo_objc_setter,
+    ClassExports, NSZonePtr, SEL,
 };
 use crate::Environment;
 
@@ -43,6 +43,10 @@ struct UITextFieldHostObject {
     delegate: id,
     editing: bool,
     text_label: id,
+    background: id,
+    disabled_background: id,
+    background_image_view: id,
+    border_style: NSInteger,
 }
 impl_HostObject_with_superclass!(UITextFieldHostObject);
 impl Default for UITextFieldHostObject {
@@ -52,8 +56,37 @@ impl Default for UITextFieldHostObject {
             delegate: nil,
             editing: false,
             text_label: nil,
+            background: nil,
+            disabled_background: nil,
+            background_image_view: nil,
+            border_style: 0,
         }
     }
+}
+
+fn update_background(env: &mut Environment, this: id) {
+    let enabled: bool = msg![env; this isEnabled];
+    let (image, mut image_view) = {
+        let host = env.objc.borrow::<UITextFieldHostObject>(this);
+        let image = if host.background == nil || host.border_style == 3 {
+            nil // Rounded-rectangle fields ignore background images.
+        } else if !enabled && host.disabled_background != nil {
+            host.disabled_background
+        } else {
+            host.background
+        };
+        (image, host.background_image_view)
+    };
+    if image != nil && image_view == nil {
+        let bounds: CGRect = msg![env; this bounds];
+        image_view = msg_class![env; UIImageView alloc];
+        image_view = msg![env; image_view initWithFrame:bounds];
+        env.objc
+            .borrow_mut::<UITextFieldHostObject>(this)
+            .background_image_view = image_view;
+        () = msg![env; this insertSubview:image_view atIndex:0i32];
+    }
+    () = msg![env; image_view setImage:image];
 }
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -79,7 +112,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setBackgroundColor:bg_color];
 
     let text_label: id = msg_class![env; UILabel new];
-    () = msg![env; text_label setBackgroundColor:bg_color];
+    let clear_color: id = msg_class![env; UIColor clearColor];
+    () = msg![env; text_label setBackgroundColor:clear_color];
     () = msg![env; text_label setTextAlignment:UITextAlignmentLeft];
 
     let text_color: id = msg_class![env; UIColor blackColor];
@@ -89,6 +123,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     host_obj.text_label = text_label;
 
     () = msg![env; this addSubview:text_label];
+    () = msg![env; this layoutSubviews];
 
     this
 }
@@ -99,11 +134,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     // TODO: actual decoding of properties
 
     let text_label: id = msg_class![env; UILabel new];
+    let clear_color: id = msg_class![env; UIColor clearColor];
+    () = msg![env; text_label setBackgroundColor:clear_color];
 
     let host_obj = env.objc.borrow_mut::<UITextFieldHostObject>(this);
     host_obj.text_label = text_label;
 
     () = msg![env; this addSubview:text_label];
+    () = msg![env; this layoutSubviews];
 
     this
 }
@@ -111,11 +149,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())dealloc {
     let UITextFieldHostObject {
         text_label,
+        background,
+        disabled_background,
+        background_image_view,
         ..
     } = std::mem::take(env.objc.borrow_mut(this));
 
     release(env, text_label);
+    release(env, background);
+    release(env, disabled_background);
+    release(env, background_image_view);
     msg_super![env; this dealloc]
+}
+
+- (())setFrame:(CGRect)frame {
+    () = msg_super![env; this setFrame:frame];
+    () = msg![env; this layoutSubviews];
+}
+
+- (())setBounds:(CGRect)bounds {
+    () = msg_super![env; this setBounds:bounds];
+    () = msg![env; this layoutSubviews];
 }
 
 - (())layoutSubviews {
@@ -123,6 +177,39 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bounds: CGRect = msg![env; this bounds];
 
     () = msg![env; text_label setFrame:bounds];
+    let image_view = env.objc.borrow::<UITextFieldHostObject>(this).background_image_view;
+    () = msg![env; image_view setFrame:bounds];
+}
+
+- (id)background {
+    env.objc.borrow::<UITextFieldHostObject>(this).background
+}
+- (())setBackground:(id)image { // UIImage*
+    retain(env, image);
+    let old_image = std::mem::replace(
+        &mut env.objc.borrow_mut::<UITextFieldHostObject>(this).background,
+        image,
+    );
+    release(env, old_image);
+    update_background(env, this);
+}
+
+- (id)disabledBackground {
+    env.objc.borrow::<UITextFieldHostObject>(this).disabled_background
+}
+- (())setDisabledBackground:(id)image { // UIImage*
+    retain(env, image);
+    let old_image = std::mem::replace(
+        &mut env.objc.borrow_mut::<UITextFieldHostObject>(this).disabled_background,
+        image,
+    );
+    release(env, old_image);
+    update_background(env, this);
+}
+
+- (())setEnabled:(bool)enabled {
+    () = msg_super![env; this setEnabled:enabled];
+    update_background(env, this);
 }
 
 - (id)text {
@@ -132,6 +219,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setText:(id)text { // NSString*
     let text_label = env.objc.borrow_mut::<UITextFieldHostObject>(this).text_label;
     () = msg![env; text_label setText:text];
+    () = msg![env; this layoutSubviews];
 
     // This will work only if all the text changes will call setText:!
     // This is the case right now.
@@ -210,8 +298,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setKeyboardType:(UIKeyboardType)type_ {
     todo_objc_setter!(this, type_);
 }
+- (NSInteger)borderStyle {
+    env.objc.borrow::<UITextFieldHostObject>(this).border_style
+}
 - (())setBorderStyle:(NSInteger)style {
-    todo_objc_setter!(this, style);
+    env.objc.borrow_mut::<UITextFieldHostObject>(this).border_style = style;
+    update_background(env, this);
 }
 - (())setEnablesReturnKeyAutomatically:(bool)enables {
     todo_objc_setter!(this, enables);
@@ -360,8 +452,7 @@ pub fn handle_text(env: &mut Environment, text_field: id, text: String) {
             "handle_text, new_text: {}",
             ns_string::to_rust_string(env, new_text)
         );
-        // TODO: refactor this to proper update() method
-        () = msg![env; text_label setText:new_text];
+        () = msg![env; text_field setText:new_text];
         () = msg![env; text_field setNeedsDisplay];
         release(env, new_text);
     }
@@ -404,10 +495,8 @@ pub fn handle_backspace(env: &mut Environment, text_field: id) {
             "handle_backspace, new_text: {}",
             ns_string::to_rust_string(env, new_text)
         );
-        // TODO: refactor this to proper update() method
-        () = msg![env; text_label setText:new_text];
+        () = msg![env; text_field setText:new_text];
         () = msg![env; text_field setNeedsDisplay];
-        release(env, new_text);
     }
 }
 

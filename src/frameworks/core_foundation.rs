@@ -121,6 +121,15 @@ fn CFShow(env: &mut Environment, obj: CFTypeRef) {
     log!("{}", to_rust_string(env, description));
 }
 
+fn CFNotificationCenterGetDarwinNotifyCenter(env: &mut Environment) -> crate::mem::ConstVoidPtr {
+    assert!(
+        env.options.disable_darwin_notifications,
+        "Darwin notifications are not implemented; --disable-darwin-notifications can bypass optional registration"
+    );
+    log!("Bypassing Darwin notification registration: returning a null notification center");
+    crate::mem::ConstVoidPtr::null()
+}
+
 const CONSTANTS: ConstantExports = &[(
     "_kCFCoreFoundationVersionNumber",
     HostConstant::Custom(|env| {
@@ -132,4 +141,7 @@ const CONSTANTS: ConstantExports = &[(
     }),
 )];
 
-const FUNCTIONS: FunctionExports = &[export_c_func!(CFShow(_))];
+const FUNCTIONS: FunctionExports = &[
+    export_c_func!(CFShow(_)),
+    export_c_func!(CFNotificationCenterGetDarwinNotifyCenter()),
+];

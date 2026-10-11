@@ -124,6 +124,16 @@ pub fn set_view_controller(env: &mut Environment, view: id, controller: id) {
     host_obj.view_controller = controller;
 }
 
+pub(super) fn is_descendant_of(env: &Environment, mut view: id, ancestor: id) -> bool {
+    while view != nil {
+        if view == ancestor {
+            return true;
+        }
+        view = env.objc.borrow::<UIViewHostObject>(view).superview;
+    }
+    false
+}
+
 /// Shared parts of `initWithCoder:` and `initWithFrame:`. These can't call
 /// `init`: the subclass may have overridden `init` and will not expect to be
 /// called here.
@@ -597,6 +607,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())removeFromSuperview {
+    if env.objc.borrow::<UIViewHostObject>(this).superview == nil {
+        return;
+    }
+    // Cancellation can re-enter removal and release the view's last owner.
+    retain(env, this);
+    super::ui_touch::cancel_touches_for_view(env, this);
     let &mut UIViewHostObject {
         ref mut superview,
         layer: this_layer,
@@ -604,6 +620,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } = env.objc.borrow_mut(this);
     let superview = std::mem::take(superview);
     if superview == nil {
+        release(env, this);
         return;
     }
     () = msg![env; this_layer removeFromSuperlayer];
@@ -613,6 +630,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let subview = subviews.remove(idx);
     assert!(subview == this);
     release(env, this);
+    release(env, this); // temporary owner across cancellation callbacks
 }
 
 - (())dealloc {

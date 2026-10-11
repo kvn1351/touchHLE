@@ -89,6 +89,7 @@ fn update(env: &mut Environment, this: id) {
     let background_image_view: id = msg![env; this backgroundImageView];
     let background_image: id = msg![env; this currentBackgroundImage];
     () = msg![env; background_image_view setImage:background_image];
+    () = msg![env; this layoutSubviews];
 }
 
 fn init_common(env: &mut Environment, this: id) -> id {
@@ -175,6 +176,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     // TODO: check which type is a default one
     set_type(env, this, UIButtonTypeCustom);
     this
+}
+
+- (())setFrame:(CGRect)frame {
+    () = msg_super![env; this setFrame:frame];
+    () = msg![env; this layoutSubviews];
+}
+
+- (())setBounds:(CGRect)bounds {
+    () = msg_super![env; this setBounds:bounds];
+    () = msg![env; this layoutSubviews];
 }
 
 - (id)initWithCoder:(id)coder {

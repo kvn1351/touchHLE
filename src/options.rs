@@ -61,6 +61,7 @@ pub struct Options {
     pub dumping_options: DumpingOptions,
     pub dumping_file: PathBuf,
     pub ignore_gl_errors: bool,
+    pub disable_darwin_notifications: bool,
     pub zero_stack_after_guest_to_host_call: Option<u32>,
 }
 
@@ -94,6 +95,7 @@ impl Default for Options {
             dumping_options: Default::default(),
             dumping_file: crate::paths::user_data_base_path().join("DUMP.txt"),
             ignore_gl_errors: false,
+            disable_darwin_notifications: false,
             zero_stack_after_guest_to_host_call: None,
         }
     }
@@ -252,6 +254,8 @@ impl Options {
             self.dumping_file = crate::paths::user_data_base_path().join(path);
         } else if arg == "--ignore-gl-errors" {
             self.ignore_gl_errors = true;
+        } else if arg == "--disable-darwin-notifications" {
+            self.disable_darwin_notifications = true;
         } else if let Some(value) = arg.strip_prefix("--zero-stack-after-guest-to-host-call=") {
             self.zero_stack_after_guest_to_host_call = Some(value.parse().map_err(|_| {
                 "Invalid value for --zero-stack-after-guest-to-host-call=".to_string()

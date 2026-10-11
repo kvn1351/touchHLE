@@ -286,6 +286,13 @@ Other options:
         and nothing else. Should be enabled only for apps which really
         need this behaviour.
 
+    --disable-darwin-notifications
+        Return a null center from CFNotificationCenterGetDarwinNotifyCenter.
+        This bypasses optional Darwin notification registration in apps that
+        check for a null center, including The Sims Medieval. Notification
+        delivery is not implemented. Apps requiring a non-null center are
+        not supported by this bypass.
+
     --zero-stack-after-guest-to-host-call=<bytes>
         After a guest-to-host call returns, zero out the given number of
         bytes immediately below the current stack pointer (i.e. the unused

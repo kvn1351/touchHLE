@@ -54,6 +54,9 @@ int test_AutoreleasePool(void);    // AutoReleasePoolTest.m
 int test_CGAffineTransform(void);  // CGAffineTransform.c
 int test_RespondsToSelector(void); // RespondsToSelector.m
 int test_Initialize(void);         // Initialize.m
+int test_NSOperationQueue_serial_execution(void); // NSOperationTest.m
+int test_NSOperationQueue_parallel_execution(void); // NSOperationTest.m
+int test_NSOperationQueue_cancellation_and_lifetime(void); // NSOperationTest.m
 
 #ifndef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 int test_cpp_virtual_inheritance(void); // CppVirtualInheritance.cpp
@@ -6693,6 +6696,9 @@ struct {
     FUNC_DEF(test_NSConditionLock_tryLockWhenCondition),
     FUNC_DEF(test_NSConditionLock_tryLock_contended),
     FUNC_DEF(test_NSConditionLock_producer_consumer),
+    FUNC_DEF(test_NSOperationQueue_serial_execution),
+    FUNC_DEF(test_NSOperationQueue_parallel_execution),
+    FUNC_DEF(test_NSOperationQueue_cancellation_and_lifetime),
     FUNC_DEF(test_CFMutableDictionary_NullCallbacks),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_PrimitiveTypes),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_CFTypes),

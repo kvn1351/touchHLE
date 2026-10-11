@@ -13,6 +13,17 @@ Changes are categorised as follows:
 * Usability: changes to features of the emulator unrelated to the above, e.g. new input methods.
 * Other: when none of the above seem to fit.
 
+## Unreleased
+
+Compatibility:
+
+- Added `--disable-darwin-notifications` to bypass optional Darwin notification registration in apps that handle a null notification center. Enabled it by default for The Sims Medieval (`com.ea.simsmedieval.bv`).
+- Exported `UIApplicationLaunchOptionsLocalNotificationKey`, avoiding a null-pointer crash when apps look up local-notification launch options.
+- Fixed ownership of main-NIB objects in `UIApplicationMain`: replacing the application delegate no longer prematurely deallocates the original delegate and its window.
+- Added `NSOperation` and `NSOperationQueue` support for non-concurrent operations run on emulated background threads, including bounded queue concurrency, cancellation and completion waiting. This fixes The Sims Medieval's audio-fade crash.
+- Added text-field background image properties and corrected dynamic text-field/button layout, text-entry updates and backspace string ownership. The Sims Medieval's naming dialog now displays its text and confirm button.
+- Cancel active touches when a view subtree is removed, including control tracking cancellation and suppression of later move/up events for the cancelled gesture. This fixes a naming-dialog crash caused by converting touch coordinates against a detached view.
+
 ## v0.3.0 (2026-10-01)
 
 Compatibility:

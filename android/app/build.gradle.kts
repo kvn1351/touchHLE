@@ -138,6 +138,7 @@ cargoNdk {
     extraCargoEnv = mapOf(
         "ANDROID_NDK" to android.ndkDirectory.toString(),
         "ANDROID_NDK_HOME" to android.ndkDirectory.toString(),
+        "CMAKE_POLICY_VERSION_MINIMUM" to "3.5",
     )
 
     if (DefaultNativePlatform.host().operatingSystem.isWindows) {

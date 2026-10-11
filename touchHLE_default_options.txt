@@ -243,3 +243,7 @@ com.ea.nfshp.bv: --force-composition
 com.ea.nfshp.inc: --force-composition
 com.ea.nfshp.ipad.bv: --force-composition
 com.ea.nfshp.ipad.inc: --force-composition
+
+# The Sims Medieval
+# Skip optional Darwin notification registration.
+com.ea.simsmedieval.bv: --disable-darwin-notifications
